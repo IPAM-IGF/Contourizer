@@ -17,8 +17,10 @@
 //package jahuwaldt.plot;
 
 import ij.ImagePlus;
+import ij.ImageStack;
 import ij.plugin.PlugIn;
 import ij.process.ByteProcessor;
+import ij.process.ShortProcessor;
 
 import java.awt.*;
 import javax.swing.*;
@@ -45,46 +47,84 @@ import java.text.NumberFormat;
 *  @author  Joseph A. Huwaldt   Date:  November 12, 2000
 *  @version November 20, 2000
 **/
-public class ContourPlot_ implements PlugIn{
+public class Contourizer_ implements PlugIn{
 
 	//	Debug flag.
 	private static final boolean DEBUG = true;
 	
 	//	The contour paths displayed in this plot.
 	private ContourPath[] paths = null;
-	private int WIDTH,HEIGHT;
-	private static float PAS=5;
+	private int WIDTH,HEIGHT, DEPTH,BITDEPTH;
+	private String name="";
+	private static float PAS=2;
 	public static void main(String[] args){}
+	
 	@Override
 	public void run(String arg0) {
-		// TODO Auto-generated method stub
 		ImagePlus currImp=ij.WindowManager.getCurrentImage();
-		byte[] bArr=(byte[]) ((ByteProcessor)currImp.getProcessor()).getPixels();
+		name=currImp.getTitle();
 		WIDTH=currImp.getWidth();
 		HEIGHT=currImp.getHeight();
+		DEPTH=currImp.getNSlices();
+		BITDEPTH=currImp.getBitDepth();
+		ij.IJ.showProgress(0, DEPTH);
 		double[][] zArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
 		double[][] xArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
 		double[][] yArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
-		int c1=0;int c2=0;
-		for(int i=0;i<WIDTH;i+=PAS){
-			c2=0;
-			for(int j=0;j<HEIGHT;j+=PAS){ 
-				xArr[c1][c2]=i+1;
-				yArr[c1][c2]=j+1;
-				zArr[c1][c2]=bArr[(j)*WIDTH+i];
-				c2++;
+		ImageStack ims=new ImageStack(WIDTH,HEIGHT);
+		ByteProcessor bp;
+		ShortProcessor sp;
+		ImageStack imsin=currImp.getImageStack();
+		for(int d=0;d<DEPTH;d++){
+			short[] sArr=null;
+			byte[] bArr=null;
+			switch(BITDEPTH){
+			case 8:
+				bArr=(byte[]) ((ByteProcessor)imsin.getProcessor(d+1)).getPixels();
+				break;
+			case 16:
+				sArr=(short[]) ((ShortProcessor)imsin.getProcessor(d+1)).getPixels();
+				break;
+			
 			}
-			c1++;
+			int c1=0;int c2=0;
+			for(int i=0;i<WIDTH;i+=PAS){
+				c2=0;
+				for(int j=0;j<HEIGHT;j+=PAS){ 
+					xArr[c1][c2]=i+1;
+					yArr[c1][c2]=j+1;
+					switch(BITDEPTH){
+						case 8: zArr[c1][c2]=bArr[(j)*WIDTH+i];break;
+						case 16: zArr[c1][c2]=sArr[(j)*WIDTH+i];break;
+					}
+					c2++;
+				}
+				c1++;
+			}
+			bArr=null;
+			switch(BITDEPTH){
+				case 8: 
+					bp=(ByteProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, 10, false);
+					ims.addSlice(""+d, bp);
+					break;
+				case 16:
+					sp=(ShortProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, 10, false);
+					ims.addSlice(""+d, sp);
+					break;
+			}
+			ij.IJ.showProgress(d+1, DEPTH);
 		}
-		bArr=null;
-		createPlot(xArr, yArr, zArr, "x", "y", null, null, 10, false);
+		imsin=null;
+		currImp=null;
+		ImagePlus contourImage=new ImagePlus(name+" contour", ims);
+		contourImage.show();
 	}
 	
 	//-------------------------------------------------------------------------
 	/**
 	*  Only subclasses can access the default constructor.
 	**/
-	public ContourPlot_() { }
+	public Contourizer_() { }
 	
 	/**
 	*  Creates an contour plot of the specified gridded, 3D, data.
@@ -104,7 +144,7 @@ public class ContourPlot_ implements PlugIn{
 	*  @param  yFormat  The number format to be used for the Y axis
 	*                   tick mark labels.
 	**/
-	public ContourPlot_( double[][] xArr, double[][] yArr, double[][] zArr, int nc, boolean intType,
+	public Contourizer_( double[][] xArr, double[][] yArr, double[][] zArr, int nc, boolean intType,
 						String title, String xLabel, String yLabel,
 						NumberFormat xFormat, NumberFormat yFormat )  {
 
@@ -114,7 +154,7 @@ public class ContourPlot_ implements PlugIn{
 		
 	}
 
-	public void createPlot( double[][] xArr, double[][] yArr, double[][] zArr,
+	public Object createPlot( double[][] xArr, double[][] yArr, double[][] zArr,
 						String xLabel, String yLabel,
 						NumberFormat xFormat, NumberFormat yFormat,
 						int nc, boolean logIntervals) {
@@ -137,10 +177,24 @@ public class ContourPlot_ implements PlugIn{
 			//	Create an empty run for each contour level.
 			/*for (int i=0; i < nc; ++i)
 				runs.add( new PlotRun() );*/
-		    byte[] contourPixels=new byte[WIDTH*HEIGHT];
-		    ByteProcessor bp=new ByteProcessor(WIDTH, HEIGHT);
-		    for(int i=0;i<contourPixels.length;i++) contourPixels[i]=(byte) 0;
-			bp.setPixels(contourPixels);
+			byte[] bcontourPixels;
+			short[] scontourPixels;
+			ByteProcessor bp=null;
+			ShortProcessor sp=null;
+			switch(BITDEPTH){
+				case 8:
+					bp=new ByteProcessor(WIDTH, HEIGHT);
+					bcontourPixels=new byte[WIDTH*HEIGHT];
+					for(int i=0;i<bcontourPixels.length;i++) bcontourPixels[i]=(byte) 0;
+					bp.setPixels(bcontourPixels);
+					break;
+				case 16: 
+					sp=new ShortProcessor(WIDTH, HEIGHT);
+					scontourPixels=new short[WIDTH*HEIGHT];
+					for(int i=0;i<scontourPixels.length;i++) scontourPixels[i]=(short) 0;
+					sp.setPixels(scontourPixels);
+					break;
+			}
 			//	Loop over all the contour paths, adding them to the appropriate
 			//	contour level.
 			for (int j=0; j < npaths; ++j) {
@@ -154,46 +208,33 @@ public class ContourPlot_ implements PlugIn{
 					System.out.println("LevelIdx = " + levelIndex);
 				}
 				
-				//	Retrieve the appropriate run.
-				/*PlotRun run = (PlotRun)runs.get(levelIndex);
-			
-				//	Add this path the the retrieved run, one data point at a time.
-				int numPoints = xData.length;
-				for (int i=0; i < numPoints; ++i) {
-					run.add( new PlotDatum(xData[i], yData[i], i != 0) );
-					if (DEBUG)
-						System.out.println("X = " + (float)xData[i] + ",  Y = " + (float)yData[i]);
-				}*/
-				
-				int numPoints = xData.length;
-				// Image de 512 * 512 pour tester
-				
+				int numPoints = xData.length;				
 				for (int i=1; i < numPoints; ++i) {
-					bp.setColor(levelIndex*10);
-					bp.drawLine((int)Math.round(xData[i-1]), (int)Math.round(yData[i-1]), (int)Math.round(xData[i]), (int)Math.round(yData[i]));
-					//contourPixels[(int) Math.round((yData[i]-1)*320+(xData[i]-1))]=125;
+					switch(BITDEPTH){
+						case 8:
+							bp.setColor(levelIndex*10);
+							bp.drawLine((int)Math.round(xData[i-1]), (int)Math.round(yData[i-1]), (int)Math.round(xData[i]), (int)Math.round(yData[i]));
+							break;
+						case 16:
+							sp.setColor(levelIndex*10);
+							sp.drawLine((int)Math.round(xData[i-1]), (int)Math.round(yData[i-1]), (int)Math.round(xData[i]), (int)Math.round(yData[i]));
+							break;
+					}
 					if (DEBUG)
 						System.out.println("X = " + (float)xData[i] + ",  Y = " + (float)yData[i]);
 				}
 				
 			}
-			ImagePlus imp=new ImagePlus();
-			
-			if(DEBUG) System.out.println(contourPixels==null);
-			
-			imp.setProcessor("contour", bp);
-			imp.show();
+			switch(BITDEPTH){
+				case 8: return bp;
+				case 16: return sp;
+			}
+			return null;
 		} catch (InterruptedException e) {
 			//	Shouldn't be possible here.
 			e.printStackTrace();
-		}
-		
-		//	Create our plot axes and add them to this plot.
-		/*PlotAxis axis = new PlotXAxis(xLabel, null, xFormat, PlotAxis.kMajorGrid);
-		this.setHorizontalAxis(axis);
-		axis = new PlotYAxis(yLabel, null, yFormat, PlotAxis.kMajorGrid);
-		this.setVerticalAxis(axis);*/
-		
+			return null;
+		}		
 	}
 
 	/**
