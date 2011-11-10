@@ -19,6 +19,7 @@
 import ij.IJ;
 import ij.ImagePlus;
 import ij.process.AutoThresholder;
+import ij.process.ImageProcessor;
 
 import java.util.*;
 
@@ -84,6 +85,8 @@ public class ContourGenerator {
 	**/
 	private boolean isCanceled = false;
 	
+	// Threshold Mode to select contours 
+	private String thresholdMode="";
 	
 	//	Variables in the original FORTRAN program.
 	private double[] pathbufxt, pathbufyt;
@@ -101,6 +104,7 @@ public class ContourGenerator {
 	private int idir;				//	Indicates current direction.
 	private int np=0;				//	Number of points in current contour line.
 	private double wx=0, wy=0;		//	Starting point of a contour line.
+	
 	
 	
 	/**
@@ -170,7 +174,7 @@ public class ContourGenerator {
 	*                       uses a linear interval if false.
 	**/
 	public ContourGenerator(double[][] xArr, double[][] yArr, double[][] fArr,
-								int nc, boolean logInterval, ImagePlus imp) {
+								int nc, boolean logInterval, ImagePlus imp, String threshold) {
 		
 		//	Make sure input data is reasonable.
 		if (yArr.length != xArr.length || yArr.length != fArr.length)
@@ -179,7 +183,7 @@ public class ContourGenerator {
 			throw new IllegalArgumentException(kInconsistantArrMsg);
 		if (xArr.length <= 1 || xArr[0].length <= 1)
 			throw new IllegalArgumentException(kArrSizeMsg);
-
+		thresholdMode=threshold;
 		xArray = xArr;
 		yArray = yArr;
 		funcArray = fArr;
@@ -292,30 +296,35 @@ public class ContourGenerator {
 	private void findLinearIntervals(int nc, ImagePlus imp) {
 	
 		//	Find min and max Z values.
-		double zMin = Double.MAX_VALUE;	
-		double zMax = -zMin;
-		int ni = funcArray.length;
-		for (int i=0; i < ni; ++i) {
-			int nj = funcArray[i].length;
-			for (int j=0; j < nj; ++j) {
-				double zVal = funcArray[i][j];
-				zMin = Math.min(zMin, zVal);
-				zMax = Math.max(zMax, zVal);
-			}
-		}
+		ImageProcessor ip = imp.getProcessor();
+		double zMax = ip.getMax();
+		double zMin = ip.getMin();
 		
 		//	Allocate memory for contour attribute array.
 		cAttr = new ContourAttrib[nc];
 		// Get histogram of the image
 		int[] histo=imp.getProcessor().getHistogram();
 		AutoThresholder athresh=new AutoThresholder();
-		int threshold=athresh.getThreshold(AutoThresholder.Method.Otsu,histo);
+		double delta;
+		AutoThresholder.Method auto=AutoThresholder.Method.Default;
+		
+		if(thresholdMode.equals("None")){
+			delta = (zMax-zMin)/(nc+1);
+		}else{
+			if(thresholdMode.equals("Otsu")){
+				auto=AutoThresholder.Method.Otsu;
+			}
+			int threshold=athresh.getThreshold(auto,histo);
+			delta = (zMax-threshold)/(nc+1);
+		}
 		//	Determine contour levels.
-		double delta = (zMax-threshold)/(nc+1);
+		
 		for (int i=0; i < nc; i++) {
 			cAttr[i] = new ContourAttrib( i*zMin + (i+1)*delta );
-			if (DEBUG)
+			if (DEBUG){
 				System.out.println("level[" + i + "] = " + (zMin + (i+1)*delta));
+				
+			}
 		}
 
 	}

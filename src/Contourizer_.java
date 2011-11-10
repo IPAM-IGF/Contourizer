@@ -18,14 +18,23 @@
 
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.gui.Line;
 import ij.plugin.PlugIn;
 import ij.process.ByteProcessor;
 import ij.process.ShortProcessor;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+
 import javax.swing.*;
 import java.util.*;
 import java.text.NumberFormat;
+
+import com.jgoodies.forms.layout.FormLayout;
+import com.jgoodies.forms.layout.ColumnSpec;
+import com.jgoodies.forms.layout.RowSpec;
+import com.jgoodies.forms.factories.FormFactory;
 
 
 
@@ -50,7 +59,7 @@ import java.text.NumberFormat;
 public class Contourizer_ implements PlugIn{
 
 	//	Debug flag.
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 	
 	//	The contour paths displayed in this plot.
 	private ContourPath[] paths = null;
@@ -58,10 +67,75 @@ public class Contourizer_ implements PlugIn{
 	private ImagePlus currImp;
 	private String name="";
 	private static float PAS=2;
+	private int nc=10;
+	private String thresholdMode="Otsu";
 	public static void main(String[] args){}
-	
+ 
 	@Override
 	public void run(String arg0) {
+		//launchCalculation();
+	    createAndShowGUI();
+
+	}
+	
+	/**
+	 * @wbp.parser.entryPoint
+	 */
+	private void createAndShowGUI() {
+		final JFrame jf=new JFrame("Contourizer");
+		jf.setSize(317, 203);
+		jf.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+		JPanel mainPanel = new JPanel();
+		jf.getContentPane().add(mainPanel, BorderLayout.CENTER);
+		mainPanel.setLayout(null);
+		
+		JLabel lblNumberOfContours = new JLabel("Number of contours");
+		lblNumberOfContours.setBounds(19, 0, 125, 44);
+		mainPanel.add(lblNumberOfContours);
+		
+		final JSpinner nbContSpinner = new JSpinner();
+		nbContSpinner.setBounds(163, 12, 118, 20);
+		nbContSpinner.setModel(new SpinnerNumberModel(new Integer(10), new Integer(1), null, new Integer(1)));
+		mainPanel.add(nbContSpinner);
+		
+		JLabel lblAutoAdj = new JLabel("Contour scale");
+		lblAutoAdj.setBounds(38, 49, 87, 31);
+		mainPanel.add(lblAutoAdj);
+		
+		final JComboBox scaleCont = new JComboBox();
+		scaleCont.setBounds(163, 52, 118, 24);
+		scaleCont.setModel(new DefaultComboBoxModel(new String[] {"Otsu", "None"}));
+		mainPanel.add(scaleCont);
+		
+		JCheckBox chckbxShowstringchk = new JCheckBox("Show Strings");
+		chckbxShowstringchk.setBounds(28, 87, 106, 23);
+		mainPanel.add(chckbxShowstringchk);
+		
+		JButton btnOk = new JButton("OK");
+		btnOk.setBounds(56, 117, 50, 25);
+		mainPanel.add(btnOk);
+		btnOk.addActionListener(new ActionListener() { 
+			public void actionPerformed(ActionEvent e) {
+				SpinnerNumberModel model = (SpinnerNumberModel)nbContSpinner.getModel();
+				nc = model.getNumber().intValue();
+				thresholdMode=(String)scaleCont.getSelectedItem();
+				jf.dispose();
+				launchCalculation();
+			}
+		});
+		
+		JButton btnClose = new JButton("Close");
+		btnClose.setBounds(188, 117, 68, 25);
+		mainPanel.add(btnClose);
+		btnClose.addActionListener(new ActionListener() { 
+			public void actionPerformed(ActionEvent e) {
+				jf.dispose();
+			}
+		});
+		jf.setVisible(true);
+	}
+	
+	public void launchCalculation(){
 		currImp=ij.WindowManager.getCurrentImage();
 		name=currImp.getTitle();
 		WIDTH=currImp.getWidth();
@@ -95,7 +169,7 @@ public class Contourizer_ implements PlugIn{
 					xArr[c1][c2]=i+1;
 					yArr[c1][c2]=j+1;
 					switch(BITDEPTH){
-						case 8: zArr[c1][c2]=bArr[(j)*WIDTH+i];break;
+						case 8: zArr[c1][c2]=bArr[(j)*WIDTH+i]&0xff;break;
 						case 16: zArr[c1][c2]=sArr[(j)*WIDTH+i];break;
 					}
 					c2++;
@@ -105,14 +179,15 @@ public class Contourizer_ implements PlugIn{
 			bArr=null;
 			switch(BITDEPTH){
 				case 8: 
-					bp=(ByteProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, 10, false);
+					bp=(ByteProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, false);
 					ims.addSlice(""+d, bp);
 					break;
 				case 16:
-					sp=(ShortProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, 10, false);
+					sp=(ShortProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, false);
 					ims.addSlice(""+d, sp);
 					break;
 			}
+			
 			ij.IJ.showProgress(d+1, DEPTH);
 		}
 		imsin=null;
@@ -120,41 +195,6 @@ public class Contourizer_ implements PlugIn{
 		ImagePlus contourImage=new ImagePlus(name+" contour", ims);
 		contourImage.show();
 	}
-	
-	//-------------------------------------------------------------------------
-	/**
-	*  Only subclasses can access the default constructor.
-	**/
-	public Contourizer_() { }
-	
-	/**
-	*  Creates an contour plot of the specified gridded, 3D, data.
-	*
-	*  @param  xArr     A 2D array of X coordinate values.
-	*  @param  yArr     A 2D array of Y coordinate values.
-	*  @param  zArr     A 2D array of Z coordinate values.
-	*  @param  nc       The number of contour levels to plot.
-	*  @param  intType  Indicates if the intervals should be log (true),
-	*                   or linear (false).
-	*  @param  title    The title to be displayed across the top
-	*                   of the plot.
-	*  @param  xLabel   The label to be displayed along the X-axis.
-	*  @param  yLabel   The label to be displayed along the Y-axis.
-	*  @param  xFormat  The number format to be used for the X axis
-	*                   tick mark labels.
-	*  @param  yFormat  The number format to be used for the Y axis
-	*                   tick mark labels.
-	**/
-	public Contourizer_( double[][] xArr, double[][] yArr, double[][] zArr, int nc, boolean intType,
-						String title, String xLabel, String yLabel,
-						NumberFormat xFormat, NumberFormat yFormat )  {
-
-		//this.setTitle(title);
-		
-		createPlot(xArr, yArr, zArr, xLabel, yLabel, xFormat, yFormat, nc, intType);
-		
-	}
-
 	public Object createPlot( double[][] xArr, double[][] yArr, double[][] zArr,
 						String xLabel, String yLabel,
 						NumberFormat xFormat, NumberFormat yFormat,
@@ -162,7 +202,7 @@ public class Contourizer_ implements PlugIn{
 		try {
 		
 			//	Generate the contours.
-			ContourGenerator cg = new ContourGenerator(xArr, yArr, zArr, nc, logIntervals, currImp);
+			ContourGenerator cg = new ContourGenerator(xArr, yArr, zArr, nc, logIntervals, currImp, thresholdMode);
 			paths = cg.getContours();
 			int npaths = paths.length;
 		
@@ -171,13 +211,6 @@ public class Contourizer_ implements PlugIn{
 				System.out.println("Number of contour paths = " + npaths);
 			}
 			
-			//	Get this plots list of runs.
-			//PlotRunList runs = this.getRuns();
-			//runs.clear();
-		
-			//	Create an empty run for each contour level.
-			/*for (int i=0; i < nc; ++i)
-				runs.add( new PlotRun() );*/
 			byte[] bcontourPixels;
 			short[] scontourPixels;
 			ByteProcessor bp=null;
@@ -253,20 +286,6 @@ public class Contourizer_ implements PlugIn{
 			minLevel = Math.min(minLevel, level);
 			maxLevel = Math.max(maxLevel, level);
 		}
-		
-		//	Now assign the colors.
-		/*PlotRunList runs = getRuns();
-		for (int i=0; i < npaths; ++i) {
-			//	Extract contour path information.
-			double level = paths[i].getAttributes().getLevel();
-			int levelIndex = paths[i].getLevelIndex();
-			
-			//	Retrieve the appropriate run.
-			PlotRun run = (PlotRun)runs.get(levelIndex);
-			
-			//	Colorize the run.
-			run.setLineColor(interpColors(lowColor, highColor, minLevel, maxLevel, level));
-		}*/
 	}
 	
 	/**
@@ -287,27 +306,6 @@ public class Contourizer_ implements PlugIn{
 	}
 
 
-	
-	/**
-	*  Make a copy of this ContourPlot object.
-	*
-	*  @return  Returns a clone of this object.
-	**/
-	/*public Object clone() {
-		ContourPlot newObject = null;
-		
-		// Make a shallow copy of this object.
-		newObject = (ContourPlot) super.clone();
-
-		// Make a copy of this object's data structures.
-		int length = this.paths.length;
-		newObject.paths = new ContourPath[length];
-		for (int i=0; i < length; ++i)
-			newObject.paths[i] = (ContourPath)this.paths[i].clone();
-
-		// Output the newly cloned object.
-		return newObject;
-	}*/
 
 }
 
