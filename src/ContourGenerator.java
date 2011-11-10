@@ -16,6 +16,10 @@
 **/
 //package jahuwaldt.plot;
 
+import ij.IJ;
+import ij.ImagePlus;
+import ij.process.AutoThresholder;
+
 import java.util.*;
 
 
@@ -166,7 +170,7 @@ public class ContourGenerator {
 	*                       uses a linear interval if false.
 	**/
 	public ContourGenerator(double[][] xArr, double[][] yArr, double[][] fArr,
-								int nc, boolean logInterval) {
+								int nc, boolean logInterval, ImagePlus imp) {
 		
 		//	Make sure input data is reasonable.
 		if (yArr.length != xArr.length || yArr.length != fArr.length)
@@ -183,7 +187,7 @@ public class ContourGenerator {
 		if (logInterval)
 			findLogIntervals(nc);
 		else
-			findLinearIntervals(nc);
+			findLinearIntervals(nc,imp);
 	}
 	
 	/**
@@ -202,7 +206,7 @@ public class ContourGenerator {
 	*                       uses a linear interval if false.
 	**/
 	public ContourGenerator(double[] xArr, double[] yArr, double[][] fArr,
-								int nc, boolean logInterval) {
+								int nc, boolean logInterval, ImagePlus imp) {
 		
 		//	Make sure input data is reasonable.
 		if (yArr.length != fArr.length || xArr.length != fArr[0].length)
@@ -217,7 +221,7 @@ public class ContourGenerator {
 		if (logInterval)
 			findLogIntervals(nc);
 		else
-			findLinearIntervals(nc);
+			findLinearIntervals(nc,imp);
 	}
 	
 	
@@ -285,7 +289,7 @@ public class ContourGenerator {
 	/**
 	*  Find contour intervals that are linearly spaced through the data.
 	**/
-	private void findLinearIntervals(int nc) {
+	private void findLinearIntervals(int nc, ImagePlus imp) {
 	
 		//	Find min and max Z values.
 		double zMin = Double.MAX_VALUE;	
@@ -302,11 +306,14 @@ public class ContourGenerator {
 		
 		//	Allocate memory for contour attribute array.
 		cAttr = new ContourAttrib[nc];
-		
+		// Get histogram of the image
+		int[] histo=imp.getProcessor().getHistogram();
+		AutoThresholder athresh=new AutoThresholder();
+		int threshold=athresh.getThreshold(AutoThresholder.Method.Otsu,histo);
 		//	Determine contour levels.
-		double delta = (zMax-zMin)/(nc+1);
+		double delta = (zMax-threshold)/(nc+1);
 		for (int i=0; i < nc; i++) {
-			cAttr[i] = new ContourAttrib( i*(255/10));//zMin + (i+1)*delta );
+			cAttr[i] = new ContourAttrib( i*zMin + (i+1)*delta );
 			if (DEBUG)
 				System.out.println("level[" + i + "] = " + (zMin + (i+1)*delta));
 		}

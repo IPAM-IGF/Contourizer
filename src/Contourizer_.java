@@ -55,13 +55,14 @@ public class Contourizer_ implements PlugIn{
 	//	The contour paths displayed in this plot.
 	private ContourPath[] paths = null;
 	private int WIDTH,HEIGHT, DEPTH,BITDEPTH;
+	private ImagePlus currImp;
 	private String name="";
 	private static float PAS=2;
 	public static void main(String[] args){}
 	
 	@Override
 	public void run(String arg0) {
-		ImagePlus currImp=ij.WindowManager.getCurrentImage();
+		currImp=ij.WindowManager.getCurrentImage();
 		name=currImp.getTitle();
 		WIDTH=currImp.getWidth();
 		HEIGHT=currImp.getHeight();
@@ -161,7 +162,7 @@ public class Contourizer_ implements PlugIn{
 		try {
 		
 			//	Generate the contours.
-			ContourGenerator cg = new ContourGenerator(xArr, yArr, zArr, nc, logIntervals);
+			ContourGenerator cg = new ContourGenerator(xArr, yArr, zArr, nc, logIntervals, currImp);
 			paths = cg.getContours();
 			int npaths = paths.length;
 		
@@ -185,13 +186,13 @@ public class Contourizer_ implements PlugIn{
 				case 8:
 					bp=new ByteProcessor(WIDTH, HEIGHT);
 					bcontourPixels=new byte[WIDTH*HEIGHT];
-					for(int i=0;i<bcontourPixels.length;i++) bcontourPixels[i]=(byte) 0;
+					for(int i=0;i<bcontourPixels.length;i++) bcontourPixels[i]=(byte) 255;
 					bp.setPixels(bcontourPixels);
 					break;
 				case 16: 
 					sp=new ShortProcessor(WIDTH, HEIGHT);
 					scontourPixels=new short[WIDTH*HEIGHT];
-					for(int i=0;i<scontourPixels.length;i++) scontourPixels[i]=(short) 0;
+					for(int i=0;i<scontourPixels.length;i++) scontourPixels[i]=(short) 255;
 					sp.setPixels(scontourPixels);
 					break;
 			}
