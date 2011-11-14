@@ -18,6 +18,7 @@
 
 import ij.IJ;
 import ij.ImagePlus;
+import ij.measure.ResultsTable;
 import ij.process.AutoThresholder;
 import ij.process.ImageProcessor;
 
@@ -174,7 +175,7 @@ public class ContourGenerator {
 	*                       uses a linear interval if false.
 	**/
 	public ContourGenerator(double[][] xArr, double[][] yArr, double[][] fArr,
-								int nc, boolean logInterval, ImagePlus imp, String threshold) {
+								int nc, boolean logInterval, ImagePlus imp,double zMin, double zMax, String threshold) {
 		
 		//	Make sure input data is reasonable.
 		if (yArr.length != xArr.length || yArr.length != fArr.length)
@@ -189,43 +190,9 @@ public class ContourGenerator {
 		funcArray = fArr;
 		
 		if (logInterval)
-			findLogIntervals(nc);
+			findLogIntervals(nc,imp,zMin,zMax);
 		else
-			findLinearIntervals(nc,imp);
-	}
-	
-	/**
-	*  Construct a ContourGenerator object using the specified data arrays.
-	*  Contour attributes, including the interval, are generated
-	*  automatically.  This constructor allows you
-	*  to use data on an evenly spaced grid where "X" values are invarient
-	*  with "Y" and "Y" values are invarient with "X".  This often occures
-	*  where the data is on an evenly spaced cartesian grid.
-	*
-	*  @param  xArr   1D array containing the grid x coordinate data.
-	*  @param  yArr   1D array containing the grid y coordinate data.
-	*  @param  fArr   2D array containing the grid function (z) data.
-	*  @param  nc     The number of contour levels to generate.
-	*  @param  logInterval  Uses a logarithmic contour interval if true, and
-	*                       uses a linear interval if false.
-	**/
-	public ContourGenerator(double[] xArr, double[] yArr, double[][] fArr,
-								int nc, boolean logInterval, ImagePlus imp) {
-		
-		//	Make sure input data is reasonable.
-		if (yArr.length != fArr.length || xArr.length != fArr[0].length)
-			throw new IllegalArgumentException(kInconsistantArrMsg);
-		if (xArr.length <= 1)
-			throw new IllegalArgumentException(kArrSizeMsg);
-
-		xArr1D = xArr;
-		yArr1D = yArr;
-		funcArray = fArr;
-		
-		if (logInterval)
-			findLogIntervals(nc);
-		else
-			findLinearIntervals(nc,imp);
+			findLinearIntervals(nc,imp,zMin,zMax);
 	}
 	
 	
@@ -289,16 +256,22 @@ public class ContourGenerator {
 		return fracComplete;
 	}
 	
+	public ContourAttrib[] getcAttr() {
+		return cAttr;
+	}
+
+	public void setcAttr(ContourAttrib[] cAttr) {
+		this.cAttr = cAttr;
+	}
+
 
 	/**
 	*  Find contour intervals that are linearly spaced through the data.
 	**/
-	private void findLinearIntervals(int nc, ImagePlus imp) {
+	private void findLinearIntervals(int nc, ImagePlus imp,double zMin, double zMax) {
 	
 		//	Find min and max Z values.
 		ImageProcessor ip = imp.getProcessor();
-		double zMax = ip.getMax();
-		double zMin = ip.getMin();
 		
 		//	Allocate memory for contour attribute array.
 		cAttr = new ContourAttrib[nc];
@@ -307,7 +280,6 @@ public class ContourGenerator {
 		AutoThresholder athresh=new AutoThresholder();
 		double delta;
 		AutoThresholder.Method auto=AutoThresholder.Method.Default;
-		
 		if(thresholdMode.equals("None")){
 			delta = (zMax-zMin)/(nc+1);
 		}else{
@@ -326,27 +298,18 @@ public class ContourGenerator {
 				
 			}
 		}
-
 	}
 	
 	/**
 	*  Find contour intervals that are logarithmically spaced through the data.
 	**/
-	private void findLogIntervals(int nc) {
+	private void findLogIntervals(int nc,ImagePlus imp,double zMin, double zMax) {
 	
-		//	Find min and max Z values.
-		double zMin = Double.MAX_VALUE;	
-		double zMax = -zMin;
-		int ni = funcArray.length;
-		for (int i=0; i < ni; ++i) {
-			int nj = funcArray[i].length;
-			for (int j=0; j < nj; ++j) {
-				double zVal = funcArray[i][j];
-				zMin = Math.min(zMin, zVal);
-				zMax = Math.max(zMax, zVal);
-			}
-		}
+		//		Find min and max Z values.
+		ImageProcessor ip = imp.getProcessor();
 		
+		//	Allocate memory for contour attribute array.
+		cAttr = new ContourAttrib[nc];
 		if (zMin < 0)
 			throw new IllegalArgumentException(kNegLogDataMsg);
 
@@ -354,11 +317,20 @@ public class ContourGenerator {
 		cAttr = new ContourAttrib[nc];
 		
 		//	Determine contour levels.
+		int[] histo=imp.getProcessor().getHistogram();
+		AutoThresholder athresh=new AutoThresholder();
+		AutoThresholder.Method auto=AutoThresholder.Method.Default;
+		if(!thresholdMode.equals("None")){
+			if(thresholdMode.equals("Otsu")){
+				auto=AutoThresholder.Method.Otsu;
+			}
+			zMin=athresh.getThreshold(auto,histo);
+		}
 		double temp = Math.log(zMin);
 		double delta = (Math.log(zMax) - temp)/(nc+1);
-		for (int i=0; i < nc; i++)
+		for (int i=0; i < nc; i++){
 			cAttr[i] = new ContourAttrib( Math.exp(temp + (i+1)*delta) );
-		
+		}
 	}
 	
 

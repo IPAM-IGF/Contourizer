@@ -16,9 +16,12 @@
 **/
 //package jahuwaldt.plot;
 
+import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.Line;
+import ij.gui.Roi;
+import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
 import ij.process.ByteProcessor;
 import ij.process.ShortProcessor;
@@ -69,6 +72,12 @@ public class Contourizer_ implements PlugIn{
 	private static float PAS=2;
 	private int nc=10;
 	private String thresholdMode="Otsu";
+	private boolean hasRoi=false;
+	private double zMax=Double.MIN_VALUE;
+	private double zMin=Double.MAX_VALUE;
+	private boolean logInterval=false;
+	private ImageStack ims=null;
+	private boolean showLevel=true;
 	public static void main(String[] args){}
  
 	@Override
@@ -104,29 +113,49 @@ public class Contourizer_ implements PlugIn{
 		
 		final JComboBox scaleCont = new JComboBox();
 		scaleCont.setBounds(163, 52, 118, 24);
-		scaleCont.setModel(new DefaultComboBoxModel(new String[] {"Otsu", "None"}));
+		scaleCont.setModel(new DefaultComboBoxModel(new String[] {"None","Otsu"}));
 		mainPanel.add(scaleCont);
 		
 		JCheckBox chckbxShowstringchk = new JCheckBox("Show Strings");
-		chckbxShowstringchk.setBounds(28, 87, 106, 23);
+		chckbxShowstringchk.setBounds(163, 86, 118, 23);
 		mainPanel.add(chckbxShowstringchk);
 		
+		final JCheckBox chckbxLogInterval = new JCheckBox("Log Interval");
+		chckbxLogInterval.setBounds(19, 86, 118, 23);
+		chckbxLogInterval.setSelected(true);
+		mainPanel.add(chckbxLogInterval);
+		
 		JButton btnOk = new JButton("OK");
-		btnOk.setBounds(56, 117, 50, 25);
+		btnOk.setBounds(56, 117, 69, 25);
 		mainPanel.add(btnOk);
 		btnOk.addActionListener(new ActionListener() { 
 			public void actionPerformed(ActionEvent e) {
 				SpinnerNumberModel model = (SpinnerNumberModel)nbContSpinner.getModel();
 				nc = model.getNumber().intValue();
 				thresholdMode=(String)scaleCont.getSelectedItem();
+				logInterval=chckbxLogInterval.isSelected();
 				jf.dispose();
-				launchCalculation();
+				Thread calculation=new Thread(){
+					public void run(){
+						try{
+							launchCalculation();
+						}catch(Exception e1){
+							IJ.log(e1.toString());
+							currImp=null;
+							ImagePlus contourImage=new ImagePlus(name+" contour", ims);
+							contourImage.show();
+						}
+					}
+				};
+				calculation.start();			
 			}
 		});
 		
 		JButton btnClose = new JButton("Close");
-		btnClose.setBounds(188, 117, 68, 25);
+		btnClose.setBounds(188, 117, 93, 25);
 		mainPanel.add(btnClose);
+		
+		
 		btnClose.addActionListener(new ActionListener() { 
 			public void actionPerformed(ActionEvent e) {
 				jf.dispose();
@@ -135,42 +164,106 @@ public class Contourizer_ implements PlugIn{
 		jf.setVisible(true);
 	}
 	
-	public void launchCalculation(){
+	public void launchCalculation() throws Exception{
 		currImp=ij.WindowManager.getCurrentImage();
 		name=currImp.getTitle();
 		WIDTH=currImp.getWidth();
 		HEIGHT=currImp.getHeight();
 		DEPTH=currImp.getNSlices();
 		BITDEPTH=currImp.getBitDepth();
+		showLevel=true;
 		ij.IJ.showProgress(0, DEPTH);
-		double[][] zArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
-		double[][] xArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
-		double[][] yArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
-		ImageStack ims=new ImageStack(WIDTH,HEIGHT);
+		Roi roi=currImp.getRoi();
+		hasRoi=roi!=null;
+		double[][] zArr;
+		double[][] xArr;
+		double[][] yArr;
+		// Set some variables to handle ROI
+		int startX=0;
+		int startY=0;
+		int endX=WIDTH;
+		int endY=HEIGHT;
+		if(!hasRoi){
+			zArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
+			xArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
+			yArr=new double[(int) Math.ceil(WIDTH/PAS)][(int) Math.ceil(HEIGHT/PAS)];
+		}else{
+			zArr=new double[(int) Math.ceil(roi.getBounds().width/PAS)][(int) Math.ceil(roi.getBounds().height/PAS)];
+			xArr=new double[(int) Math.ceil(roi.getBounds().width/PAS)][(int) Math.ceil(roi.getBounds().height/PAS)];
+			yArr=new double[(int) Math.ceil(roi.getBounds().width/PAS)][(int) Math.ceil(roi.getBounds().height/PAS)];
+			startX=roi.getBounds().x;
+			startY=roi.getBounds().y;
+			endX=startX+roi.getBounds().width;
+			endY=startY+roi.getBounds().height;
+		}
+		ims=new ImageStack(WIDTH,HEIGHT);
 		ByteProcessor bp;
 		ShortProcessor sp;
 		ImageStack imsin=currImp.getImageStack();
+		
+		// get min and max in the ROI based on all slices
+		if(hasRoi){
+			short[] sArr=null;
+			byte[] bArr=null;
+			for(int d=0;d<DEPTH;d++){
+				switch(BITDEPTH){
+				case 8:
+					bArr=(byte[]) ((ByteProcessor)imsin.getProcessor(d+1)).getPixels();
+					break;
+				case 16:
+					sArr=(short[]) ((ShortProcessor)imsin.getProcessor(d+1)).getPixels();
+					break;
+				}
+				for(int i=startX;i<endX;i+=PAS){
+					for(int j=startY;j<endY;j+=PAS){ 
+						if((roi.contains(i+1, j+1))){
+							switch(BITDEPTH){
+								case 8:	
+									zMax=Math.max(zMax, bArr[(j)*WIDTH+i]&0xff);
+									zMin=Math.min(zMin, bArr[(j)*WIDTH+i]&0xff);break;
+								case 16: 
+									zMax=Math.max(zMax, sArr[(j)*WIDTH+i]);
+									zMin=Math.min(zMin, sArr[(j)*WIDTH+i]); break;
+							}
+						}
+					}
+				}
+			}
+		}
 		for(int d=0;d<DEPTH;d++){
+			// On lance un exception si il reste moins de 50 Mo de ram
+			if((ij.IJ.maxMemory()-ij.IJ.currentMemory())<50000000) throw new Exception("Not enough memory");
 			short[] sArr=null;
 			byte[] bArr=null;
 			switch(BITDEPTH){
 			case 8:
 				bArr=(byte[]) ((ByteProcessor)imsin.getProcessor(d+1)).getPixels();
+				if(!hasRoi){
+					zMax=((ByteProcessor)imsin.getProcessor(d+1)).getMax();
+					zMin=((ByteProcessor)imsin.getProcessor(d+1)).getMin();
+				}
 				break;
 			case 16:
 				sArr=(short[]) ((ShortProcessor)imsin.getProcessor(d+1)).getPixels();
+				if(!hasRoi){
+					zMax=((ShortProcessor)imsin.getProcessor(d+1)).getMax();
+					zMin=((ShortProcessor)imsin.getProcessor(d+1)).getMin();
+				}
 				break;
 			
 			}
 			int c1=0;int c2=0;
-			for(int i=0;i<WIDTH;i+=PAS){
+			for(int i=startX;i<endX;i+=PAS){
 				c2=0;
-				for(int j=0;j<HEIGHT;j+=PAS){ 
+				for(int j=startY;j<endY;j+=PAS){ 
 					xArr[c1][c2]=i+1;
 					yArr[c1][c2]=j+1;
-					switch(BITDEPTH){
-						case 8: zArr[c1][c2]=bArr[(j)*WIDTH+i]&0xff;break;
-						case 16: zArr[c1][c2]=sArr[(j)*WIDTH+i];break;
+					zArr[c1][c2]=255;
+					if(!hasRoi || (roi.contains(i+1, j+1))){
+						switch(BITDEPTH){
+							case 8:	zArr[c1][c2]=bArr[(j)*WIDTH+i]&0xff;break;
+							case 16: zArr[c1][c2]=sArr[(j)*WIDTH+i]; break;
+						}
 					}
 					c2++;
 				}
@@ -179,11 +272,11 @@ public class Contourizer_ implements PlugIn{
 			bArr=null;
 			switch(BITDEPTH){
 				case 8: 
-					bp=(ByteProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, false);
+					bp=(ByteProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, logInterval);
 					ims.addSlice(""+d, bp);
 					break;
 				case 16:
-					sp=(ShortProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, false);
+					sp=(ShortProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, logInterval);
 					ims.addSlice(""+d, sp);
 					break;
 			}
@@ -202,10 +295,22 @@ public class Contourizer_ implements PlugIn{
 		try {
 		
 			//	Generate the contours.
-			ContourGenerator cg = new ContourGenerator(xArr, yArr, zArr, nc, logIntervals, currImp, thresholdMode);
+			ContourGenerator cg = new ContourGenerator(xArr, yArr, zArr, nc, logIntervals, currImp, zMin, zMax, thresholdMode);
+			// display contour list
+			if(showLevel){
+				ContourAttrib[] cattr=cg.getcAttr();
+				ResultsTable rt=new ResultsTable();
+				rt.addColumns();
+				for(int i=cattr.length-1;i>=0;i--){
+					rt.incrementCounter();
+					rt.setValue(1, i, cattr[i].getLevel());
+				}
+				rt.show("Levels");
+				showLevel=false;
+			}
+			
 			paths = cg.getContours();
 			int npaths = paths.length;
-		
 			if (DEBUG) {
 				System.out.println("Number of contours = " + nc);
 				System.out.println("Number of contour paths = " + npaths);
@@ -219,13 +324,13 @@ public class Contourizer_ implements PlugIn{
 				case 8:
 					bp=new ByteProcessor(WIDTH, HEIGHT);
 					bcontourPixels=new byte[WIDTH*HEIGHT];
-					for(int i=0;i<bcontourPixels.length;i++) bcontourPixels[i]=(byte) 255;
+					for(int i=0;i<bcontourPixels.length;i++) bcontourPixels[i]=(byte) 0;
 					bp.setPixels(bcontourPixels);
 					break;
 				case 16: 
 					sp=new ShortProcessor(WIDTH, HEIGHT);
 					scontourPixels=new short[WIDTH*HEIGHT];
-					for(int i=0;i<scontourPixels.length;i++) scontourPixels[i]=(short) 255;
+					for(int i=0;i<scontourPixels.length;i++) scontourPixels[i]=(short) 0;
 					sp.setPixels(scontourPixels);
 					break;
 			}
@@ -304,8 +409,5 @@ public class Contourizer_ implements PlugIn{
 		
 		return color;
 	}
-
-
-
 }
 
