@@ -32,6 +32,7 @@ import java.awt.event.ActionListener;
 
 import javax.swing.*;
 import java.util.*;
+import java.util.List;
 import java.text.NumberFormat;
 
 import com.jgoodies.forms.layout.FormLayout;
@@ -78,6 +79,8 @@ public class Contourizer_ implements PlugIn{
 	private boolean logInterval=false;
 	private ImageStack ims=null;
 	private boolean showLevel=true;
+
+	private boolean smoothResult=true;
 	public static void main(String[] args){}
  
 	@Override
@@ -125,8 +128,14 @@ public class Contourizer_ implements PlugIn{
 		chckbxLogInterval.setSelected(true);
 		mainPanel.add(chckbxLogInterval);
 		
+		final JCheckBox chckbxSmoothResults = new JCheckBox("Smooth results");
+		chckbxSmoothResults.setBounds(19, 108, 140, 23);
+		chckbxSmoothResults.setSelected(true);
+		mainPanel.add(chckbxSmoothResults);
+		
+		
 		JButton btnOk = new JButton("OK");
-		btnOk.setBounds(56, 117, 69, 25);
+		btnOk.setBounds(56, 139, 69, 25);
 		mainPanel.add(btnOk);
 		btnOk.addActionListener(new ActionListener() { 
 			public void actionPerformed(ActionEvent e) {
@@ -134,6 +143,7 @@ public class Contourizer_ implements PlugIn{
 				nc = model.getNumber().intValue();
 				thresholdMode=(String)scaleCont.getSelectedItem();
 				logInterval=chckbxLogInterval.isSelected();
+				smoothResult=chckbxSmoothResults.isSelected();
 				jf.dispose();
 				Thread calculation=new Thread(){
 					public void run(){
@@ -152,7 +162,7 @@ public class Contourizer_ implements PlugIn{
 		});
 		
 		JButton btnClose = new JButton("Close");
-		btnClose.setBounds(188, 117, 93, 25);
+		btnClose.setBounds(182, 139, 93, 25);
 		mainPanel.add(btnClose);
 		
 		
@@ -303,7 +313,7 @@ public class Contourizer_ implements PlugIn{
 				rt.addColumns();
 				for(int i=cattr.length-1;i>=0;i--){
 					rt.incrementCounter();
-					rt.setValue(1, i, cattr[i].getLevel());
+					rt.setValue(1, cattr.length-1-i, cattr[i].getLevel());
 				}
 				rt.show("Levels");
 				showLevel=false;
@@ -341,26 +351,29 @@ public class Contourizer_ implements PlugIn{
 				double[] xData = paths[j].getAllX();
 				double[] yData = paths[j].getAllY();
 				int levelIndex = paths[j].getLevelIndex();
-			
+				List<CustomLine> list=arrayToLines(xData, yData);
+				if(smoothResult)
+					for(int i=0;i<10;i++)
+						list=LineSmoother.smoothLine(list);
 				if (DEBUG) {
 					System.out.println();
 					System.out.println("LevelIdx = " + levelIndex);
 				}
 				
 				int numPoints = xData.length;				
-				for (int i=1; i < numPoints; ++i) {
+				for(CustomLine cl:list){//(int i=1; i < numPoints; ++i) {
 					switch(BITDEPTH){
 						case 8:
 							bp.setColor(levelIndex*10);
-							bp.drawLine((int)Math.round(xData[i-1]), (int)Math.round(yData[i-1]), (int)Math.round(xData[i]), (int)Math.round(yData[i]));
+							bp.drawLine(cl.x1, cl.y1, cl.x2, cl.y2);
 							break;
 						case 16:
 							sp.setColor(levelIndex*10);
-							sp.drawLine((int)Math.round(xData[i-1]), (int)Math.round(yData[i-1]), (int)Math.round(xData[i]), (int)Math.round(yData[i]));
+							sp.drawLine(cl.x1, cl.y1, cl.x2, cl.y2);
 							break;
 					}
-					if (DEBUG)
-						System.out.println("X = " + (float)xData[i] + ",  Y = " + (float)yData[i]);
+					//if (DEBUG)
+						//System.out.println("X = " + (float)xData[i] + ",  Y = " + (float)yData[i]);
 				}
 				
 			}
@@ -409,5 +422,14 @@ public class Contourizer_ implements PlugIn{
 		
 		return color;
 	}
+	
+	
+    private List<CustomLine> arrayToLines(double[] x,double[] y){
+    	LinkedList<CustomLine> ll=new LinkedList<CustomLine>();
+    	for (int i=1; i < x.length; ++i) {
+			ll.add(new CustomLine((int)Math.round(x[i-1]), (int)Math.round(y[i-1]), (int)Math.round(x[i]), (int)Math.round(y[i])));
+    	}
+    	return ll;
+    }
 }
 
