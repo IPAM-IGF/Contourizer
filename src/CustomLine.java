@@ -1,9 +1,8 @@
 import java.awt.Point;
-import java.util.LinkedList;
 
 /**
  * A class to represent a line created from two points
- * @author Derek Springer
+ * 
  */
 public class CustomLine {
 

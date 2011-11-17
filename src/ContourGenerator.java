@@ -14,11 +14,8 @@
 *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 *   Library General Public License for more details.
 **/
-//package jahuwaldt.plot;
 
-import ij.IJ;
 import ij.ImagePlus;
-import ij.measure.ResultsTable;
 import ij.process.AutoThresholder;
 import ij.process.ImageProcessor;
 
@@ -39,11 +36,11 @@ import java.util.*;
 *  </p>
 *
 *  <p> Ported from C to Java by Joseph A. Huwaldt, November 16, 2000.  </p>
+*	   Adapted to be an ImageJ plugin by Jérémy DEVERDUN
+*  
 *
-*  <p>  Modified by:  Joseph A. Huwaldt  </p>
-*
-*  @author  Joseph A. Huwaldt   Date:  November 11, 2000
-*  @version November 23, 2000
+*  @author  Jérémy DEVERDUN   Date:  November 11, 2011
+*  @version November 11, 2011
 **/
 public class ContourGenerator {
 

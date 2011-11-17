@@ -1,5 +1,5 @@
 /*
-*   ContourPlot  -- A simple 2D contour plot of gridded 3D data.
+*   Contourizer, an ImageJ plugin to make contours plots
 *
 *   Copyright (C) 2000-2002 by Joseph A. Huwaldt <jhuwaldt@knology.net>.
 *   All rights reserved.
@@ -14,12 +14,9 @@
 *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 *   Library General Public License for more details.
 **/
-//package jahuwaldt.plot;
-
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
-import ij.gui.Line;
 import ij.gui.Roi;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
@@ -35,31 +32,16 @@ import java.util.*;
 import java.util.List;
 import java.text.NumberFormat;
 
-import com.jgoodies.forms.layout.FormLayout;
-import com.jgoodies.forms.layout.ColumnSpec;
-import com.jgoodies.forms.layout.RowSpec;
-import com.jgoodies.forms.factories.FormFactory;
-
 
 
 /**
-*  <p> An object that represents a simple 2D contour plot
-*      of 3D data.
-*  </p>
-*  <p> Grid styles, axis formats, and axis labels can
-*      be changed by accessing this object's axes and
-*      making the changes there.  Then call repaint()
-*      on the component containing this plot.
-*  </p>
-*  <p> This object's run list contains the contour lines
-*      being plotted.  Each run represents a contour level.
-*  </p>
-*
-*  <p>  Modified by:  Joseph A. Huwaldt  </p>
-*
-*  @author  Joseph A. Huwaldt   Date:  November 12, 2000
-*  @version November 20, 2000
-**/
+ * ImageJ plugin to automaticaly retrieve contour from
+ * Image data, within or not the selected ROI
+ * 
+ * 
+ *  Based on the java code from : Joseph A. Huwaldt  
+ *	Update to make an ImageJ plugin by Jérémy DEVERDUN
+ **/
 public class Contourizer_ implements PlugIn{
 
 	//	Debug flag.
@@ -116,7 +98,7 @@ public class Contourizer_ implements PlugIn{
 		
 		final JComboBox scaleCont = new JComboBox();
 		scaleCont.setBounds(163, 52, 118, 24);
-		scaleCont.setModel(new DefaultComboBoxModel(new String[] {"None","Otsu"}));
+		scaleCont.setModel(new DefaultComboBoxModel(new String[] {"Otsu","None"}));
 		mainPanel.add(scaleCont);
 		
 		JCheckBox chckbxShowstringchk = new JCheckBox("Show Strings");
@@ -241,7 +223,7 @@ public class Contourizer_ implements PlugIn{
 			}
 		}
 		for(int d=0;d<DEPTH;d++){
-			// On lance un exception si il reste moins de 50 Mo de ram
+			// Test if there is enough memory
 			if((ij.IJ.maxMemory()-ij.IJ.currentMemory())<50000000) throw new Exception("Not enough memory");
 			short[] sArr=null;
 			byte[] bArr=null;
@@ -359,9 +341,8 @@ public class Contourizer_ implements PlugIn{
 					System.out.println();
 					System.out.println("LevelIdx = " + levelIndex);
 				}
-				
-				int numPoints = xData.length;				
-				for(CustomLine cl:list){//(int i=1; i < numPoints; ++i) {
+								
+				for(CustomLine cl:list){
 					switch(BITDEPTH){
 						case 8:
 							bp.setColor(levelIndex*10);
@@ -372,8 +353,6 @@ public class Contourizer_ implements PlugIn{
 							sp.drawLine(cl.x1, cl.y1, cl.x2, cl.y2);
 							break;
 					}
-					//if (DEBUG)
-						//System.out.println("X = " + (float)xData[i] + ",  Y = " + (float)yData[i]);
 				}
 				
 			}
@@ -390,41 +369,12 @@ public class Contourizer_ implements PlugIn{
 	}
 
 	/**
-	*  Colorize the contours by linearly interpolating between
-	*  the specified colors for this plot's range of contour levels.
-	**/
-	public void colorizeContours(Color lowColor, Color highColor) {
-		
-		//	Find the range of levels in the contours.
-		double minLevel = Double.MAX_VALUE;
-		double maxLevel = -minLevel;
-		int npaths = paths.length;
-		for (int i=0; i < npaths; ++i) {
-			double level = paths[i].getAttributes().getLevel();
-			minLevel = Math.min(minLevel, level);
-			maxLevel = Math.max(maxLevel, level);
-		}
-	}
-	
-	/**
-	*  Interpolate the colors for the contour level.
-	**/
-	private Color interpColors(Color lowColor, Color highColor,
-						double minLevel, double maxLevel, double level) {
-		level -= minLevel;
-		double range = maxLevel - minLevel;
-		double temp = range - level;
-		
-		Color color = new Color(
-			(int)(( temp*lowColor.getRed() + level*highColor.getRed() )/range),
-			(int)(( temp*lowColor.getGreen() + level*highColor.getGreen() )/range),
-			(int)(( temp*lowColor.getBlue() + level*highColor.getBlue() )/range) );
-		
-		return color;
-	}
-	
-	
-    private List<CustomLine> arrayToLines(double[] x,double[] y){
+	 * Convert an array of x and y positions to a list of customLine
+	 * @param x array of x positions
+	 * @param y array of y positiond
+	 * @return List of customLine
+	 */
+	private List<CustomLine> arrayToLines(double[] x,double[] y){
     	LinkedList<CustomLine> ll=new LinkedList<CustomLine>();
     	for (int i=1; i < x.length; ++i) {
 			ll.add(new CustomLine((int)Math.round(x[i-1]), (int)Math.round(y[i-1]), (int)Math.round(x[i]), (int)Math.round(y[i])));

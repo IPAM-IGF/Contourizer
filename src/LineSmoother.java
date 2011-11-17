@@ -6,7 +6,7 @@ import java.util.List;
  * A method to smooth a hand-drawn line based on the McMaster 
  * line smoothing algorithm
  * 
- * @author Derek Springer
+ * 
  */
 public class LineSmoother {
 
