@@ -17,9 +17,12 @@
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.gui.GenericDialog;
 import ij.gui.Roi;
 import ij.measure.ResultsTable;
+import ij.plugin.ContrastEnhancer;
 import ij.plugin.PlugIn;
+import ij.plugin.frame.ContrastAdjuster;
 import ij.process.ByteProcessor;
 import ij.process.ShortProcessor;
 
@@ -61,8 +64,10 @@ public class Contourizer_ implements PlugIn{
 	private boolean logInterval=false;
 	private ImageStack ims=null;
 	private boolean showLevel=true;
+	private ResultsTable rt;
 
 	private boolean smoothResult=true;
+	
 	public static void main(String[] args){}
  
 	@Override
@@ -76,84 +81,26 @@ public class Contourizer_ implements PlugIn{
 	 * @wbp.parser.entryPoint
 	 */
 	private void createAndShowGUI() {
-		final JFrame jf=new JFrame("Contourizer");
-		jf.setSize(317, 203);
-		jf.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-		JPanel mainPanel = new JPanel();
-		jf.getContentPane().add(mainPanel, BorderLayout.CENTER);
-		mainPanel.setLayout(null);
-		
-		JLabel lblNumberOfContours = new JLabel("Number of contours");
-		lblNumberOfContours.setBounds(19, 0, 125, 44);
-		mainPanel.add(lblNumberOfContours);
-		
-		final JSpinner nbContSpinner = new JSpinner();
-		nbContSpinner.setBounds(163, 12, 118, 20);
-		nbContSpinner.setModel(new SpinnerNumberModel(new Integer(10), new Integer(1), null, new Integer(1)));
-		mainPanel.add(nbContSpinner);
-		
-		JLabel lblAutoAdj = new JLabel("Contour scale");
-		lblAutoAdj.setBounds(38, 49, 87, 31);
-		mainPanel.add(lblAutoAdj);
-		
-		final JComboBox scaleCont = new JComboBox();
-		scaleCont.setBounds(163, 52, 118, 24);
-		scaleCont.setModel(new DefaultComboBoxModel(new String[] {"Otsu","None"}));
-		mainPanel.add(scaleCont);
-		
-		JCheckBox chckbxShowstringchk = new JCheckBox("Show Strings");
-		chckbxShowstringchk.setBounds(163, 86, 118, 23);
-		mainPanel.add(chckbxShowstringchk);
-		
-		final JCheckBox chckbxLogInterval = new JCheckBox("Log Interval");
-		chckbxLogInterval.setBounds(19, 86, 118, 23);
-		chckbxLogInterval.setSelected(true);
-		mainPanel.add(chckbxLogInterval);
-		
-		final JCheckBox chckbxSmoothResults = new JCheckBox("Smooth results");
-		chckbxSmoothResults.setBounds(19, 108, 140, 23);
-		chckbxSmoothResults.setSelected(true);
-		mainPanel.add(chckbxSmoothResults);
-		
-		
-		JButton btnOk = new JButton("OK");
-		btnOk.setBounds(56, 139, 69, 25);
-		mainPanel.add(btnOk);
-		btnOk.addActionListener(new ActionListener() { 
-			public void actionPerformed(ActionEvent e) {
-				SpinnerNumberModel model = (SpinnerNumberModel)nbContSpinner.getModel();
-				nc = model.getNumber().intValue();
-				thresholdMode=(String)scaleCont.getSelectedItem();
-				logInterval=chckbxLogInterval.isSelected();
-				smoothResult=chckbxSmoothResults.isSelected();
-				jf.dispose();
-				Thread calculation=new Thread(){
-					public void run(){
-						try{
-							launchCalculation();
-						}catch(Exception e1){
-							IJ.log(e1.toString());
-							currImp=null;
-							ImagePlus contourImage=new ImagePlus(name+" contour", ims);
-							contourImage.show();
-						}
-					}
-				};
-				calculation.start();			
-			}
-		});
-		
-		JButton btnClose = new JButton("Close");
-		btnClose.setBounds(182, 139, 93, 25);
-		mainPanel.add(btnClose);
-		
-		
-		btnClose.addActionListener(new ActionListener() { 
-			public void actionPerformed(ActionEvent e) {
-				jf.dispose();
-			}
-		});
-		jf.setVisible(true);
+		GenericDialog g=new GenericDialog("Contourizer");
+		g.addSlider("Number of contours", 2, 100, 10);
+		g.addChoice("Contour scale", new String[] {"Otsu","None"}, "Otsu");
+		g.addCheckboxGroup(2, 2, new String[]{"Show Levels","Log Interval","Smooth results"}, new boolean[]{true,true,false});
+		g.showDialog();
+		if (g.wasCanceled()) return;
+	    nc=(int) Math.round(g.getNextNumber());
+	    thresholdMode=g.getNextChoice();
+	    showLevel=g.getNextBoolean();
+	    logInterval=g.getNextBoolean();
+	    smoothResult=g.getNextBoolean();
+		try{
+			launchCalculation();
+		}catch(Exception e1){
+			IJ.log(e1.toString());
+			currImp=null;
+			ImagePlus contourImage=new ImagePlus(name+" contour", ims);
+			contourImage.show();
+			ij.IJ.freeMemory();
+		}
 	}
 	
 	public void launchCalculation() throws Exception{
@@ -163,7 +110,6 @@ public class Contourizer_ implements PlugIn{
 		HEIGHT=currImp.getHeight();
 		DEPTH=currImp.getNSlices();
 		BITDEPTH=currImp.getBitDepth();
-		showLevel=true;
 		ij.IJ.showProgress(0, DEPTH);
 		Roi roi=currImp.getRoi();
 		hasRoi=roi!=null;
@@ -192,7 +138,6 @@ public class Contourizer_ implements PlugIn{
 		ByteProcessor bp;
 		ShortProcessor sp;
 		ImageStack imsin=currImp.getImageStack();
-		
 		// get min and max in the ROI based on all slices
 		if(hasRoi){
 			short[] sArr=null;
@@ -224,7 +169,8 @@ public class Contourizer_ implements PlugIn{
 		}
 		for(int d=0;d<DEPTH;d++){
 			// Test if there is enough memory
-			if((ij.IJ.maxMemory()-ij.IJ.currentMemory())<50000000) throw new Exception("Not enough memory");
+			ij.IJ.freeMemory();
+			//if((ij.IJ.maxMemory()-ij.IJ.currentMemory())<50000000) throw new Exception("Not enough memory");
 			short[] sArr=null;
 			byte[] bArr=null;
 			switch(BITDEPTH){
@@ -263,14 +209,14 @@ public class Contourizer_ implements PlugIn{
 			}
 			bArr=null;
 			switch(BITDEPTH){
-				case 8: 
+				case 8: case 16:
 					bp=(ByteProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, logInterval);
 					ims.addSlice(""+d, bp);
 					break;
-				case 16:
+			/*	case 16:
 					sp=(ShortProcessor) createPlot(xArr, yArr, zArr, "x", "y", null, null, nc, logInterval);
 					ims.addSlice(""+d, sp);
-					break;
+					break;*/
 			}
 			
 			ij.IJ.showProgress(d+1, DEPTH);
@@ -279,6 +225,8 @@ public class Contourizer_ implements PlugIn{
 		currImp=null;
 		ImagePlus contourImage=new ImagePlus(name+" contour", ims);
 		contourImage.show();
+		contourImage=null;
+		ij.IJ.freeMemory();
 	}
 	public Object createPlot( double[][] xArr, double[][] yArr, double[][] zArr,
 						String xLabel, String yLabel,
@@ -291,11 +239,11 @@ public class Contourizer_ implements PlugIn{
 			// display contour list
 			if(showLevel){
 				ContourAttrib[] cattr=cg.getcAttr();
-				ResultsTable rt=new ResultsTable();
+				rt=new ResultsTable();
 				rt.addColumns();
-				for(int i=cattr.length-1;i>=0;i--){
+				for(int i=0;i<cattr.length;i++){
 					rt.incrementCounter();
-					rt.setValue(1, cattr.length-1-i, cattr[i].getLevel());
+					rt.setValue(1, i, cattr[i].getLevel());
 				}
 				rt.show("Levels");
 				showLevel=false;
@@ -313,18 +261,18 @@ public class Contourizer_ implements PlugIn{
 			ByteProcessor bp=null;
 			ShortProcessor sp=null;
 			switch(BITDEPTH){
-				case 8:
+				case 8:case 16:
 					bp=new ByteProcessor(WIDTH, HEIGHT);
 					bcontourPixels=new byte[WIDTH*HEIGHT];
 					for(int i=0;i<bcontourPixels.length;i++) bcontourPixels[i]=(byte) 0;
 					bp.setPixels(bcontourPixels);
 					break;
-				case 16: 
+				/*case 16: 
 					sp=new ShortProcessor(WIDTH, HEIGHT);
 					scontourPixels=new short[WIDTH*HEIGHT];
 					for(int i=0;i<scontourPixels.length;i++) scontourPixels[i]=(short) 0;
 					sp.setPixels(scontourPixels);
-					break;
+					break;*/
 			}
 			//	Loop over all the contour paths, adding them to the appropriate
 			//	contour level.
@@ -344,21 +292,21 @@ public class Contourizer_ implements PlugIn{
 								
 				for(CustomLine cl:list){
 					switch(BITDEPTH){
-						case 8:
-							bp.setColor(levelIndex*10);
+						case 8:case 16:
+							bp.setColor(levelIndex+1);//(int)Math.round((2^BITDEPTH)/rt.getValueAsDouble(1, levelIndex)*255));
 							bp.drawLine(cl.x1, cl.y1, cl.x2, cl.y2);
 							break;
-						case 16:
+						/*case 16:
 							sp.setColor(levelIndex*10);
 							sp.drawLine(cl.x1, cl.y1, cl.x2, cl.y2);
-							break;
+							break;*/
 					}
 				}
-				
+				bp.setMinAndMax(1, levelIndex+1);
 			}
 			switch(BITDEPTH){
-				case 8: return bp;
-				case 16: return sp;
+				case 8: case 16: return bp;
+				//case 16: return sp;
 			}
 			return null;
 		} catch (InterruptedException e) {
@@ -371,7 +319,7 @@ public class Contourizer_ implements PlugIn{
 	/**
 	 * Convert an array of x and y positions to a list of customLine
 	 * @param x array of x positions
-	 * @param y array of y positiond
+	 * @param y array of y positions
 	 * @return List of customLine
 	 */
 	private List<CustomLine> arrayToLines(double[] x,double[] y){

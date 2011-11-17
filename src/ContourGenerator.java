@@ -287,7 +287,6 @@ public class ContourGenerator {
 			delta = (zMax-threshold)/(nc+1);
 		}
 		//	Determine contour levels.
-		
 		for (int i=0; i < nc; i++) {
 			cAttr[i] = new ContourAttrib( i*zMin + (i+1)*delta );
 			if (DEBUG){
